@@ -7,7 +7,8 @@ from isbnlib.registry import bibformatters, add_service
 from googleapi import query as gquery
 from openlapi import query as oquery
 from dbkkapi import query as dbkkquery, merge_data
-from bookdb import insert_book, sanitize_metadata, create_connection, book_exist
+from bookdb import (insert_book, sanitize_metadata, create_connection,
+                    book_exist, get_locations_id)
 from olib_add_new_book import add_book
 
 import numpy as np
@@ -48,7 +49,10 @@ data_oquery = []
 data_gquery = []
 data_dbkkquery = []
 
+# create conection to the DB and get the location id,
+# eg: which id does location 2.5 correspond to
 conn = create_connection(BOOKS_DB)
+id_loc_map = get_locations_id(conn)
 
 for index, row in df.iterrows():
     # if index < 30:
@@ -82,7 +86,9 @@ for index, row in df.iterrows():
 
         # fill with info from DBKK db if something is missing
         data, updated = merge_data(ret, dbkk)
-
+        # Find the location id from the location number.
+        data['Location'] = id_loc_map[str(data['Location'])]
+       
         # update openlibrary with info from DBKK db
         if bool(updated) and data_from == "olib":
             print(f"### UPDATED WITH INFO FROM DBKK ###\n{updated}\n")

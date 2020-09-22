@@ -125,6 +125,7 @@ def query(records):
         canonical["Pages"] = records.get("Sideantal", "")
         canonical["Categories"] = records.get("Beskrivelse", "")
         canonical["Description"] = ""
+        canonical["Preview"] = ""
 
         # in DBKK db, the authors might be in 'last, first'-name.
         # lets reverse that

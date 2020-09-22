@@ -12,7 +12,7 @@ LOGGER = logging.getLogger(__name__)
 SERVICE_URL = (
     "https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}"
     "&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,"
-    "language,industryIdentifiers,"
+    "language,industryIdentifiers,previewLink"
     "pageCount,imageLinks.thumbnail,categories,description"  # we want these extra fields
     ")&maxResults=1"
 )
@@ -43,6 +43,8 @@ def _mapper(isbn, records):
         categories = records.get("categories", [""])
         canonical["Categories"] = " ;".join(categories)
         canonical["Description"] = records.get("description")
+        canonical["Language"] = records.get("language", "")
+        canonical["Preview"] = records.get("previewLink", "")
 
     except Exception:  # pragma: no cover
         LOGGER.debug("RecordMappingError for %s with data %s", isbn, records)

@@ -3,7 +3,7 @@
 import sqlite3
 import numpy as np
 from dbkkapi import COUNTRY_TABLE, LOC_TABLE
-
+import argparse
 
 """update and insert books/locations into sqlite db.
 
@@ -68,8 +68,9 @@ def insert_book(conn, data):
         return
 
     sql = """INSERT INTO book(isbn, olid, title, authors, publisher, publish_date,
-    number_of_pages, subjects, openlibrary_medcover_url, location)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    number_of_pages, subjects, openlibrary_medcover_url, location, language,
+    openlibrary_preview_url, description)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     return updatedb(conn, sql, data)
 
@@ -90,6 +91,9 @@ def sanitize_metadata(data):
     d["subjects"] = data["Categories"]
     d["openlibrary_medcover_url"] = data["Cover"]
     d["location"] = data["Location"]
+    d["langauge"] = data["Language"]
+    d["openlibrary_preview_url"] = data["Preview"]
+    d["description"] = data["Description"]
     return tuple(d.values())
 
 
@@ -97,8 +101,15 @@ if __name__ == "__main__":
     DB_FILE = "books.sqlite"
     conn = create_connection(DB_FILE)
 
-# create locations. Only to be run once
-# r = create_locations(conn)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--init', action='store_true',  # set to True if present
+                        help="Fill the locations table. Only to be run on new DBs")
+    args = parser.parse_args()
+
+    # create locations. Only to be run once
+    if args.init:
+        r = create_locations(conn)
 
 
 # id_loc_map = get_locations_id(conn)

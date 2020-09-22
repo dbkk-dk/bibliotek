@@ -19,6 +19,12 @@ For at køre scriptet, skal følgende installeres,
 * API
 fx, =isbn=184195215X= (isbn10),
 ** =olib=
+https://openlibrary.org/dev/docs/api/books
+
+example:
 [[https://openlibrary.org/api/books?bibkeys=ISBN:184195215X&jscmd=data&format=json][https://openlibrary.org/api/books?bibkeys=ISBN:184195215X&jscmd=data&format=json]]
 ** =goob=
+https://developers.google.com/books/docs/v1/reference/volumes
+
+example:
 [[https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories)&maxResults=1][https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories)&maxResults=1]]
