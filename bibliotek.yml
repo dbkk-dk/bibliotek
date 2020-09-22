@@ -1,0 +1,14 @@
+# conda env create --file bibliotek.yml
+# conda env update --file bibliotek.yml
+#
+name: bibliotek
+channels:
+- conda-forge
+- defaults
+dependencies:
+- python=3
+- ipython
+- pip:
+    - isbnlib
+    - openlibrary-client
+    - pandas_access  # for mdb file, https://stackoverflow.com/a/50899540

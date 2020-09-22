@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+
+import sqlite3
+import numpy as np
+from dbkkapi import COUNTRY_TABLE, LOC_TABLE
+
+
+"""update and insert books/locations into sqlite db.
+
+Create the db from the command line:
+sqlite3 < createdb.sqlite"""
+
+
+def create_connection(db_file):
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+    except sqlite3.Error as e:
+        print(e)
+
+    return conn
+
+
+def updatedb(conn, sql, data):
+    cur = conn.cursor()
+    if isinstance(data, list) and len(data) > 1:
+        cur.executemany(sql, data)
+    else:
+        cur.execute(sql, data)
+    conn.commit()
+    return cur.lastrowid
+
+
+def create_locations(conn):
+    # populate locations in database
+    sql = "INSERT INTO location(label_name, full_name) VALUES(?,?)"
+
+    loc1 = [(v, k) for k, v in LOC_TABLE.items()]
+    loc2 = [(f"2.{v}", k) for k, v in COUNTRY_TABLE.items()]
+    loc = loc1 + loc2
+    return updatedb(conn, sql, loc)
+
+
+def get_locations_id(conn):
+    # returns a dict with location -> id mapping
+    sql = "SELECT * FROM location"
+    cur = conn.cursor()
+    cur.execute(sql)
+    rows = cur.fetchall()  # (id, label_name, full_name)
+    ids = {row[1]: row[0] for row in rows}
+    return ids
+
+
+def book_exist(conn, isbn):
+    # returns bool, depending on if the book exist or not
+
+    # SELECT count(*) returns either (1,) or (0,).
+    cur = conn.cursor()
+    cur.execute("SELECT count(*) FROM book WHERE isbn = ?", (isbn,))
+    return bool(cur.fetchone()[0])
+
+
+def insert_book(conn, data):
+    # insert a new book, after checking if it exist
+
+    isbn = data[0]
+    if book_exist(conn, isbn):
+        return
+
+    sql = """INSERT INTO book(isbn, olid, title, authors, publisher, publish_date,
+    number_of_pages, subjects, openlibrary_medcover_url, location)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    return updatedb(conn, sql, data)
+
+
+def sanitize_metadata(data):
+    # convert data dict -> tuple to match sql database
+    # as of python 3.7, dicts are guaranteed to be insertion ordered. Thus we
+    # can just convert dict to tuple. For python < 3.7, this approach is error
+    # phrone
+    d = {}
+    d["isbn"] = data["ISBN-13"]
+    d["olid"] = data.get("Olid", "")
+    d["title"] = data["Title"]
+    d["authors"] = data["Authors"]
+    d["publisher"] = data["Publisher"]
+    d["publish_date"] = data["Year"]
+    d["number_of_pages"] = data["Pages"]
+    d["subjects"] = data["Categories"]
+    d["openlibrary_medcover_url"] = data["Cover"]
+    d["location"] = data["Location"]
+    return tuple(d.values())
+
+
+if __name__ == "__main__":
+    DB_FILE = "books.sqlite"
+    conn = create_connection(DB_FILE)
+
+# create locations. Only to be run once
+# r = create_locations(conn)
+
+
+# id_loc_map = get_locations_id(conn)
+# loc = id_loc_map[ret['Location']]
+# data = (ret['ISBN-13'], ret['Olid'], ret['Title'], ret['Authors'], ret['Publisher'],
+#         ret['Year'], ret['Pages'], ret['Categories'], ret['Cover'], loc)
+
+# r = insert_book(data)
