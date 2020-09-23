@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 """Query googleapi for isbn
+
+https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories,description)&maxResults=1
+https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&maxResults=1
 """
 
 import logging
@@ -12,10 +15,18 @@ LOGGER = logging.getLogger(__name__)
 SERVICE_URL = (
     "https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}"
     "&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,"
-    "language,industryIdentifiers,previewLink"
+    "language,industryIdentifiers,previewLink,"
     "pageCount,imageLinks.thumbnail,categories,description"  # we want these extra fields
     ")&maxResults=1"
 )
+
+
+def google_identifiers(identifiers):
+    # returns dict, {'isbn_10': val, 'isbn_13': val}
+    identifiers = {identifier["type"].lower(): [identifier["identifier"]] for identifier in identifiers}
+    if "isbn_10" not in identifiers and "isbn_13" not in identifiers:
+        raise KeyError(f"missing isbn in {identifiers}")
+    return identifiers
 
 
 def _mapper(isbn, records):
@@ -24,27 +35,30 @@ def _mapper(isbn, records):
     try:
 
         canonical = {}
-        canonical["ISBN-13"] = isbn
+        canonical["isbn"] = isbn
         title = records.get("title").replace(" :", ":")
         subtitle = records.get("subtitle")
         title = title + " - " + subtitle if subtitle else title
-        canonical["Title"] = title
+        canonical["title"] = title
         authors =  records.get("authors", [""])
-        canonical["Authors"] = " ;".join(authors)
+        canonical["authors"] = " ;".join(authors)
         # see issue #64
-        canonical["Publisher"] = records.get("publisher", "").strip('"')
+        canonical["publisher"] = records.get("publisher", "").strip('"')
         if "publishedDate" in records and len(records["publishedDate"]) >= 4:
-            canonical["Year"] = records["publishedDate"][0:4]
+            canonical["year"] = records["publishedDate"][0:4]
         else:  # pragma: no cover
-            canonical["Year"] = ""
-        canonical["Language"] = records.get("language")
-        canonical["Cover"] = records.get("imageLinks", {"thumbnail": ""}).get("thumbnail")
-        canonical["Pages"] = records.get("pageCount")
+            canonical["year"] = ""
+        canonical["language"] = records.get("language")
+        canonical["thumbnail"] = records.get("imageLinks", {"thumbnail": ""}).get("thumbnail")
+        canonical["pages"] = records.get("pageCount")
         categories = records.get("categories", [""])
-        canonical["Categories"] = " ;".join(categories)
-        canonical["Description"] = records.get("description")
-        canonical["Language"] = records.get("language", "")
-        canonical["Preview"] = records.get("previewLink", "")
+        canonical["categories"] = " ;".join(categories)
+        canonical["description"] = records.get("description")
+        canonical["language"] = records.get("language", "")
+        canonical["preview_url"] = records.get("previewLink", "")
+        identifiers = records["industryIdentifiers"]
+        d = google_identifiers(identifiers)
+        canonical = {**canonical, **d}
 
     except Exception:  # pragma: no cover
         LOGGER.debug("RecordMappingError for %s with data %s", isbn, records)

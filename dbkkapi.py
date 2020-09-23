@@ -3,7 +3,7 @@
 
 from _exceptions import RecordMappingError
 from numpy import NaN
-from isbnlib import canonical as isbn_canonical
+from isbnlib import canonical as isbn_canonical, is_isbn10, is_isbn13
 import logging
 
 LOGGER = logging.getLogger(__name__)
@@ -87,59 +87,43 @@ COUNTRY_TABLE = {
 }
 
 
-def merge_data(data, dbkk):
-    """Merge values from dbkk into data, if the value in data is empty.
-
-    Also returns the updated values in a separate dict, so we can update
-    openlibrary with the missing data
-
-    Test if dict is empty:
-    bool({}) -> False
-    not {} -> True
-    len({}) -> 0
-    """
-    # this does not work; we need to treat empty strings
-    # return {**dbkk, **data}
-
-    updated = {}
-    res = data.copy()
-    for k,v in dbkk.items():
-        if k not in data or data[k] == '':
-            res[k] = v
-            updated[k] = v
-    return res, updated
-
-
 def query(records):
     isbn = isbn_canonical(records.get("ISBN-nr", ""))
     title = records.get("Titel", "")
     try:
         canonical = {}
-        canonical["ISBN-13"] = isbn
-        canonical["Title"] = title
-        canonical["Publisher"] = records.get("Forlag", "")
-        canonical["Year"] = records.get("Årstal")
+        canonical["isbn"] = isbn
+        canonical["title"] = title
+        canonical["publisher"] = records.get("Forlag", "")
+        canonical["year"] = records.get("Årstal")
         sprog = records.get("Sprog", "")
-        canonical["Language"] = sprog_map.get(sprog, "")
-        canonical["Cover"] = ""
-        canonical["Pages"] = records.get("Sideantal", "")
-        canonical["Categories"] = records.get("Beskrivelse", "")
-        canonical["Description"] = ""
-        canonical["Preview"] = ""
+        canonical["language"] = sprog_map.get(sprog, "")
+        canonical["thumbnail"] = ""
+        canonical["pages"] = records.get("Sideantal", "")
+        canonical["categories"] = records.get("Beskrivelse", "")
+        canonical["description"] = ""
+        canonical["preview_url"] = ""
 
         # in DBKK db, the authors might be in 'last, first'-name.
         # lets reverse that
         author = records.get("Forfatter", "")
         if author.find(",") != -1:
             author = " ".join(author.split(", ")[::-1])
-        canonical["Authors"] = author
+        canonical["authors"] = author
 
         # loc_id : placering paa hylden
         loc_id = LOC_TABLE[records["Beskrivelse"]]
         if loc_id == LOC_TABLE["Område/Guide/Ekspedition"]:
             loc_id = f"{loc_id}.{COUNTRY_TABLE[records['Land']]}"
+        canonical["location"] = loc_id
 
-        canonical["Location"] = loc_id
+        if is_isbn10(isbn):
+            canonical["isbn_10"] = isbn
+        elif is_isbn13(isbn):
+            canonical["isbn_13"] = isbn
+        else:
+            LOGGER.debug(f"isbn {isbn} is neither isbn10 or isbn13.\n{records}")
+            # raise KeyError(f"isbn {isbn} is neither isbn10 or isbn13")
 
     except Exception:  # pragma: no cover
         LOGGER.debug(

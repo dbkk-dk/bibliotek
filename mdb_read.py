@@ -6,9 +6,10 @@ from isbnlib.registry import bibformatters, add_service
 # my libs
 from googleapi import query as gquery
 from openlapi import query as oquery
-from dbkkapi import query as dbkkquery, merge_data
+from dbkkapi import query as dbkkquery
 from bookdb import (insert_book, sanitize_metadata, create_connection,
                     book_exist, get_locations_id)
+from helpers import merge_data
 from olib_add_new_book import add_book
 
 import numpy as np
@@ -75,40 +76,39 @@ for index, row in df.iterrows():
         if book_exist(conn, isbn) and not UPDATE_DB:
             continue
 
-        # lookup the isbn
-        ret = oquery(isbn)
-        if ret == dict():  # no result from openlibrary
-            data_from = "goob"
-            ret = gquery(isbn)
-        if ret == dict():  # no result from googleapi
-            data_from = "dbkk"
-            ret = dbkkquery(row)
+        # lookup the isbn. Query all sources to get most info. Then merge
+        olib = oquery(isbn)
+        goob = gquery(isbn)
+        dbkk = dbkkquery(row)
 
-        # fill with info from DBKK db if something is missing
-        data, updated = merge_data(ret, dbkk)
+        data, updated1 = merge_data(olib, goob)
+        data, updated2 = merge_data(data, dbkk)
+        updated = {**updated1, **updated2}
+
+        if olib == dict():  # no result from openlibrary
+            data_from = "goob"
+        if goob == dict():  # no result from googleapi
+            data_from = "dbkk"
+
         # Find the location id from the location number.
-        data['Location'] = id_loc_map[str(data['Location'])]
+        data['location'] = id_loc_map[str(data['location'])]
        
         # update openlibrary with info from DBKK db
         if bool(updated) and data_from == "olib":
-            print(f"### UPDATED WITH INFO FROM DBKK ###\n{updated}\n")
-
+            # print(f"### UPDATED WITH INFO FROM DBKK ###\n{updated}\n")
             pass
 
-        if data_from == "olib":
-            data_oquery.append(deepcopy(data))
-        elif data_from == "goob":
-            data_gquery.append(deepcopy(data))
-        else:
-            data_dbkkquery.append(deepcopy(data))
-
+        data_oquery.append(olib)
+        data_gquery.append(goob)
+        data_dbkkquery.append(dbkk)
         data_isbn.append(data)
 
         # create the book if it doesn't exist in openlibrary
         if data_from != "olib":
             try:
-                new_book = add_book(data)
-                print("book added to OLIB.")
+                pass  # does not work yet
+                # new_book = add_book(data)
+                # print("book added to OLIB.")
             except ValueError as e:
                 print(f"Creation failed with {e}")
 

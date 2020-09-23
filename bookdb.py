@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import sqlite3
-import numpy as np
 from dbkkapi import COUNTRY_TABLE, LOC_TABLE
 import argparse
+from _exceptions import RecordMappingError, ISBNNotConsistentError
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 """update and insert books/locations into sqlite db.
 
@@ -67,11 +70,12 @@ def insert_book(conn, data):
     if book_exist(conn, isbn):
         return
 
-    sql = """INSERT INTO book(isbn, olid, title, authors, publisher, publish_date,
-    number_of_pages, subjects, openlibrary_medcover_url, location, language,
-    openlibrary_preview_url, description)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
+    sql = """INSERT INTO book
+    (isbn, isbn_10, isbn_13, olid, goodreads, title, authors,
+    publisher, publish_date, number_of_pages, subjects,
+    openlibrary_medcover_url, location, language, openlibrary_preview_url,
+    description)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
     return updatedb(conn, sql, data)
 
 
@@ -80,20 +84,27 @@ def sanitize_metadata(data):
     # as of python 3.7, dicts are guaranteed to be insertion ordered. Thus we
     # can just convert dict to tuple. For python < 3.7, this approach is error
     # phrone
-    d = {}
-    d["isbn"] = data["ISBN-13"]
-    d["olid"] = data.get("Olid", "")
-    d["title"] = data["Title"]
-    d["authors"] = data["Authors"]
-    d["publisher"] = data["Publisher"]
-    d["publish_date"] = data["Year"]
-    d["number_of_pages"] = data["Pages"]
-    d["subjects"] = data["Categories"]
-    d["openlibrary_medcover_url"] = data["Cover"]
-    d["location"] = data["Location"]
-    d["langauge"] = data["Language"]
-    d["openlibrary_preview_url"] = data["Preview"]
-    d["description"] = data["Description"]
+    try:
+        d = {}
+        d["isbn"] = data["isbn"]
+        d["isbn_10"] = data.get("isbn_10", "")
+        d["isbn_13"] = data.get("isbn_13", "")
+        d["olid"] = data.get("openlibrary", "")
+        d["goodreads"] = data.get("goodreads", "")
+        d["title"] = data["title"]
+        d["authors"] = data["authors"]
+        d["publisher"] = data["publisher"]
+        d["publish_date"] = data["year"]
+        d["number_of_pages"] = data["pages"]
+        d["subjects"] = data["categories"]
+        d["openlibrary_medcover_url"] = data["thumbnail"]
+        d["location"] = data["location"]
+        d["langauge"] = data["language"]
+        d["openlibrary_preview_url"] = data["preview_url"]
+        d["description"] = data["description"]
+    except KeyError as e:
+        LOGGER.debug("RecordMappingError for %s with data %s", e, data)
+        raise RecordMappingError(e)
     return tuple(d.values())
 
 

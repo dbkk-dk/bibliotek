@@ -10,6 +10,15 @@ password: ***********
 Successfully configured
 
 The keys are stored in ~/.config/ol.ini
+
+https://github.com/hornc/catharbot
+https://github.com/internetarchive/openlibrary/wiki/Writing-Bots
+https://github.com/internetarchive/openlibrary-client/issues/165
+https://gitter.im/theopenlibrary/Lobby
+
+https://platform.worldcat.org/api-explorer/apis
+https://platform.worldcat.org/api-explorer/apis/Classify/ClassificationResource/Search
+http://classify.oclc.org/classify2/Classify?title=de%20syv%20tinder
 """
 
 # Import necessary libraries to use
@@ -22,16 +31,16 @@ def add_book(data):
     # add book to openlibrary.org
 
     # Define a Book Object
-    authors = [common.Author(name=author) for author in data['Authors'].split(', ')]
-    book = common.Book(title=data['Title'],
+    authors = [common.Author(name=author) for author in data['authors'].split(', ')]
+    book = common.Book(title=data['title'],
                        authors=authors,
-                       publisher=data['Publisher'],
-                       publish_date=data['Publisher'],
-                       pages=data['Pages'],
+                       publisher=data['publisher'],
+                       publish_date=data['year'],
+                       pages=data['pages'],
                        )
 
     # Add metadata like ISBN 10 and ISBN 13
-    isbn = data['ISBN-13']
+    isbn = data['isbn']
     if is_isbn10(isbn):
         book.add_id('isbn_10', isbn)
     elif is_isbn13(isbn):
@@ -41,8 +50,8 @@ def add_book(data):
     ol = OpenLibrary()
     new_book = ol.create_book(book)
 
-    new_book.add_bookcover(data['Cover'])
-    new_book.work.add_subject(data['Categories'])
+    new_book.add_bookcover(data['cover'])
+    new_book.work.add_subject(data['categories'])
     new_book.save()
 
     return new_book

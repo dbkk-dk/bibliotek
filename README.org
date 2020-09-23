@@ -27,4 +27,21 @@ example:
 https://developers.google.com/books/docs/v1/reference/volumes
 
 example:
-[[https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories)&maxResults=1][https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories)&maxResults=1]]
+[[https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories,description)&maxResults=1][https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&fields=items/volumeInfo(title,subtitle,authors,publisher,publishedDate,language,industryIdentifiers,pageCount,imageLinks.thumbnail,categories,description)&maxResults=1]]
+
+Or all available info
+[[https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&maxResults=1][https://www.googleapis.com/books/v1/volumes?q=isbn:184195215X&maxResults=1]]
+
+* Andre scripts
+** bots
+https://gitter.im/theopenlibrary/Lobby
+https://github.com/internetarchive/openlibrary/wiki/Writing-Bots
+https://github.com/internetarchive/openlibrary-bots
+
+https://github.com/internetarchive/openlibrary-bots/blob/master/google-books-bot
+https://github.com/hornc/catharbot
+
+* barcode
+
+3of9 code ser ud til at vaere brugbar
+http://grandzebu.net/informatique/codbar-en/codbar.htm
