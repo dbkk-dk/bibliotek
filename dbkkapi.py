@@ -95,7 +95,7 @@ def query(records):
         canonical["isbn"] = isbn
         canonical["title"] = title
         canonical["publisher"] = records.get("Forlag", "")
-        canonical["year"] = records.get("Årstal")
+        canonical["year"] = records.get("Årstal", "")
         sprog = records.get("Sprog", "")
         canonical["language"] = sprog_map.get(sprog, "")
         canonical["thumbnail"] = ""
@@ -106,11 +106,9 @@ def query(records):
 
         # in DBKK db, the authors might be in 'last, first'-name.
         # lets reverse that
-        author = records.get("Forfatter", "")
-        if author.find(",") != -1:
-            author = " ".join(author.split(", ")[::-1])
-        canonical["authors"] = author
-
+        authors = records.get("Forfatter", "").replace("&","og").split(" og ")
+        authors = [" ".join(author.split(", ")[::-1]) for author in authors]
+        canonical["authors"] = authors
         # loc_id : placering paa hylden
         loc_id = LOC_TABLE[records["Beskrivelse"]]
         if loc_id == LOC_TABLE["Område/Guide/Ekspedition"]:
@@ -118,16 +116,12 @@ def query(records):
         canonical["location"] = loc_id
 
         if is_isbn10(isbn):
-            canonical["isbn_10"] = isbn
+            canonical["isbn_10"] = [isbn]
         elif is_isbn13(isbn):
-            canonical["isbn_13"] = isbn
+            canonical["isbn_13"] = [isbn]
         else:
             LOGGER.debug(f"isbn {isbn} is neither isbn10 or isbn13.\n{records}")
             # raise KeyError(f"isbn {isbn} is neither isbn10 or isbn13")
-
     except Exception:  # pragma: no cover
-        LOGGER.debug(
-            "RecordMappingError for (%s, %s) with data %s", isbn, title, records
-        )
-        raise RecordMappingError(isbn, title)
+        raise RecordMappingError(f"for ({isbn}, {title}) with data {records}")
     return canonical

@@ -11,7 +11,11 @@ LOGGER = logging.getLogger(__name__)
 """update and insert books/locations into sqlite db.
 
 Create the db from the command line:
-sqlite3 < createdb.sqlite"""
+sqlite3 < createdb.sqlite
+
+Delete all cells in table
+DELETE FROM book
+"""
 
 
 def create_connection(db_file):
@@ -54,29 +58,54 @@ def get_locations_id(conn):
     return ids
 
 
-def book_exist(conn, isbn):
-    # returns bool, depending on if the book exist or not
+def book_exist(conn, data_dict):
+    """returns bool, depending on if the book exist or not
+
+    data_dict is a dict containing the k,v used for the search, eg
+    data_dict = {k: dbkk[k] for k in ('isbn',)}
+
+    This function generates the sql statement and keys
+    sql = 'isbn = ?; key': (isbn,)
+    sql = 'title = ? and authors = ?'; key: (title, author)
+
+    example
+    SELECT count(*) FROM book WHERE title = 'Im steilen Eis - 80 Eiswände in den Alpen' and authors = 'Erich Vanis';
+    """
+    data = convert_list(data_dict)
+    sql = " = ? and ".join(data.keys()) + " = ?"
+    key = list(data.values())
 
     # SELECT count(*) returns either (1,) or (0,).
+    sql = "SELECT count(*) FROM book WHERE " + sql
+    LOGGER.debug(f"sql={sql}; key={key}")
     cur = conn.cursor()
-    cur.execute("SELECT count(*) FROM book WHERE isbn = ?", (isbn,))
+    cur.execute(sql, key)
     return bool(cur.fetchone()[0])
 
 
 def insert_book(conn, data):
     # insert a new book, after checking if it exist
 
-    isbn = data[0]
-    if book_exist(conn, isbn):
+    d = {"title": data[7], "authors": data[8]}
+    if book_exist(conn, d):
         return
 
+    # do this a bit more dynamically
+    # https://stackoverflow.com/a/39361069
     sql = """INSERT INTO book
-    (isbn, isbn_10, isbn_13, olid, goodreads, title, authors,
+    (isbn, isbn_10, isbn_13, olid, goodreads, lccn, oclc, title, authors,
     publisher, publish_date, number_of_pages, subjects,
     openlibrary_medcover_url, location, language, openlibrary_preview_url,
     description)
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
     return updatedb(conn, sql, data)
+
+
+def convert_list(d):
+    for k, v in d.items():
+        if isinstance(v, list):
+            d[k] = "; ".join(v)
+    return d
 
 
 def sanitize_metadata(data):
@@ -86,11 +115,13 @@ def sanitize_metadata(data):
     # phrone
     try:
         d = {}
-        d["isbn"] = data["isbn"]
+        d["isbn"] = data.get("isbn", "")
         d["isbn_10"] = data.get("isbn_10", "")
         d["isbn_13"] = data.get("isbn_13", "")
         d["olid"] = data.get("openlibrary", "")
         d["goodreads"] = data.get("goodreads", "")
+        d["lccn"] = data.get("lccn", "")
+        d["oclc"] = data.get("oclc", "")
         d["title"] = data["title"]
         d["authors"] = data["authors"]
         d["publisher"] = data["publisher"]
@@ -105,6 +136,8 @@ def sanitize_metadata(data):
     except KeyError as e:
         LOGGER.debug("RecordMappingError for %s with data %s", e, data)
         raise RecordMappingError(e)
+
+    d = convert_list(d)
     return tuple(d.values())
 
 
@@ -112,10 +145,13 @@ if __name__ == "__main__":
     DB_FILE = "books.sqlite"
     conn = create_connection(DB_FILE)
 
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--init', action='store_true',  # set to True if present
-                        help="Fill the locations table. Only to be run on new DBs")
+    parser.add_argument(
+        "-i",
+        "--init",
+        action="store_true",  # set to True if present
+        help="Fill the locations table. Only to be run on new DBs",
+    )
     args = parser.parse_args()
 
     # create locations. Only to be run once

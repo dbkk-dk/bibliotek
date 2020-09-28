@@ -18,6 +18,7 @@ CREATE TABLE book (
         olid VARCHAR(20),
         goodreads VARCHAR(20),
         lccn VARCHAR(20),
+        oclc VARCHAR(20),
         title VARCHAR(200),
         authors VARCHAR(200),
         publisher VARCHAR(50),
