@@ -30,6 +30,7 @@ def create_connection(db_file):
 
 def updatedb(conn, sql, data):
     cur = conn.cursor()
+    LOGGER.debug(f"sql={sql}; key={data}")
     if isinstance(data, list) and len(data) > 1:
         cur.executemany(sql, data)
     else:
@@ -58,7 +59,7 @@ def get_locations_id(conn):
     return ids
 
 
-def book_exist(conn, data_dict):
+def book_exist(conn, data_dict, all_true=True, return_bool=True):
     """returns bool, depending on if the book exist or not
 
     data_dict is a dict containing the k,v used for the search, eg
@@ -72,15 +73,28 @@ def book_exist(conn, data_dict):
     SELECT count(*) FROM book WHERE title = 'Im steilen Eis - 80 Eiswände in den Alpen' and authors = 'Erich Vanis';
     """
     data = convert_list(data_dict)
-    sql = " = ? and ".join(data.keys()) + " = ?"
+    if all_true:
+        sql = " = ? and ".join(data.keys()) + " = ?"
+    else:
+        sql = " = ? or ".join(data.keys()) + " = ?"
     key = list(data.values())
 
     # SELECT count(*) returns either (1,) or (0,).
-    sql = "SELECT count(*) FROM book WHERE " + sql
+    if return_bool:
+        sql = "SELECT count(*) FROM book WHERE " + sql
+    else:
+        sql = "SELECT * FROM book WHERE " + sql
+
     LOGGER.debug(f"sql={sql}; key={key}")
     cur = conn.cursor()
     cur.execute(sql, key)
-    return bool(cur.fetchone()[0])
+
+    if return_bool:
+        res = bool(cur.fetchone()[0])
+    else:
+        res = cur.fetchone()
+    # LOGGER.debug(res)
+    return res
 
 
 def insert_book(conn, data):
@@ -99,6 +113,10 @@ def insert_book(conn, data):
     description)
     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """
     return updatedb(conn, sql, data)
+
+
+def update_book(conn, data):
+    return
 
 
 def convert_list(d):
