@@ -13,6 +13,19 @@ Det primære script er =mdb_read.py=. Det læser =bjerg2003.mdb=, parser info og
 Før scriptet køres, skal databasen oprettes. Det gøres med
 
   sqlite3 < createdb.sqlite
+** sqldiff
+Forskel mellem to databaser
+#+begin_src sh
+sqldiff [options] database1.sqlite database2.sqlite
+#+end_src
+If no options are specified, then the output of =sqldiff= is SQL statements that will transform =database1.sqlite= (the "source" database) into =odatabase2.sqlite= (the "destination" database).
+
+eller manuelt
+#+begin_src sh
+sqlite3 first.sqlite .dump >first.dump
+sqlite3 second.sqlite .dump >second.dump
+diff first.dump second.dump
+#+end_src
 * Install
 For at køre scriptet, skal følgende installeres,
     pip install openlibrary-client isbnlib
