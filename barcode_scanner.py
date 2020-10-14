@@ -3,6 +3,7 @@
 import functools
 import logging
 import pickle
+import pprint
 import select
 import sys
 
@@ -95,9 +96,9 @@ def _(data):
 
 
 conn = create_connection(BOOKS_DB)
+# {1: ('5', 'Biografi/Erindringer/Historie'), 2: ('6', 'Blandet indhold'), ...
 id_loc_map = get_locations_id(conn)
-# except KeyboardInterrupt:
-#    port = None
+loc_id_map = {v[0]: k for k, v in id_loc_map.items()}
 
 
 KEEP_SQL = "UPDATE book SET in_lib = ? WHERE id = ?;"
@@ -139,7 +140,10 @@ try:
             print(
                 f"{id}, {title} -- {authors}\n shelf: {id_loc_map[location]}, {publisher}, {isbns}"
             )
-            ret = input("Keep [Y/n]?, change loc [c] or dry-run [d]\n") or "y"
+            ret = (
+                input("Keep [Y/n]?, change loc [c], view loc [l] or dry-run [d]\n")
+                or "y"
+            )
             if ret == "y":
                 sql = KEEP_SQL
                 data = 1
@@ -149,6 +153,9 @@ try:
             elif ret == "c":
                 sql = MOVE_SQL
                 data = input("New location\n")
+                data = loc_id_map[data]
+            elif ret == "l":
+                pprint.pprint(id_loc_map)
             else:
                 continue
             data = (data, id)
