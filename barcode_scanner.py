@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 #
-import serial
-from serial.tools.list_ports import comports
+import functools
 import logging
 import pickle
+import select
+import sys
+
+import serial
+from serial.tools.list_ports import comports
+
 from bookdb import create_connection, updatedb
 
 logging.basicConfig(level=logging.DEBUG)
@@ -42,14 +47,6 @@ def ask_for_port():
             port = ports[index]
         return port
 
-def get_locations_id(conn):
-    # returns a dict with location -> id mapping
-    sql = "SELECT * FROM location"
-    cur = conn.cursor()
-    cur.execute(sql)
-    rows = cur.fetchall()  # (id, label_name, full_name)
-    ids = {row[0]: (row[1], row[2]) for row in rows}
-    return ids
 
 # Try the default macos port. If not working, ask user for port
 while True:
@@ -63,6 +60,40 @@ while True:
         # so we use that.
         port = port.replace("cu.", "tty,")
 
+
+def get_locations_id(conn):
+    # returns a dict with location -> id mapping
+    sql = "SELECT * FROM location"
+    cur = conn.cursor()
+    cur.execute(sql)
+    rows = cur.fetchall()  # (id, label_name, full_name)
+    ids = {row[0]: (row[1], row[2]) for row in rows}
+    return ids
+
+
+# single_dispatch: A form of generic function dispatch where the implementation
+# is chosen based on the type of a single argument.
+# https://docs.python.org/3/library/functools.html#functools.singledispatch
+# Another simple way to test if data is bytes and need to be decoded
+# isinstance(barcode, (data, bytearray))
+@functools.singledispatch
+def decode(data):
+    raise TypeError("Unknown type: " + repr(type(data)))
+
+
+@decode.register(str)
+def _(data):
+    # data is a str
+    return data.rstrip()
+
+
+@decode.register(bytes)
+@decode.register(bytearray)
+def _(data):
+    data = data.decode("utf-8")
+    return decode(data)
+
+
 conn = create_connection(BOOKS_DB)
 id_loc_map = get_locations_id(conn)
 # except KeyboardInterrupt:
@@ -72,27 +103,38 @@ id_loc_map = get_locations_id(conn)
 KEEP_SQL = "UPDATE book SET in_lib = ? WHERE id = ?;"
 MOVE_SQL = "UPDATE book SET location = ? WHERE id = ?;"
 
+# different inputs to read from. Nonblocking by using select
+inputs = [sys.stdin, ser]
+
 unknown_isbns = []
 try:
     while True:
         print("scan book")
-        # with serial.Serial(port) as ser:
-        # read bytes, convert to str and strip '\r\n'
-        barcode = ser.readline().decode("utf-8").rstrip()
+        # read from multiple inputs
+        (ready, [], []) = select.select(inputs, [], [])
+        if not ready:
+            continue
+        else:
+            for f in ready:
+                # decode and strip newline
+                barcode = f.readline()
+                barcode = decode(barcode)
+
         print(barcode)
 
         data = {k: f"%{barcode}%" for k in ("isbn", "isbn_10", "isbn_13")}
         sql = " like ? or ".join(data.keys()) + " like ?"
         key = list(data.values())
-        sql = ("SELECT id, title, authors, location, publisher, isbn, isbn_10, "
-               "isbn_13 FROM book WHERE ") + sql
+        sql = (
+            "SELECT id, title, authors, location, publisher, isbn, isbn_10, "
+            "isbn_13 FROM book WHERE "
+        ) + sql
         cur = conn.cursor()
         cur.execute(sql, key)
         book = cur.fetchone()
 
         if book:
-            id, title, authors, location, publisher, isbn, isbn_10, isbn_13 =\
-                book
+            id, title, authors, location, publisher, isbn, isbn_10, isbn_13 = book
             isbns = (isbn, isbn_10, isbn_13)
             print(
                 f"{id}, {title} -- {authors}\n shelf: {id_loc_map[location]}, {publisher}, {isbns}"
@@ -121,7 +163,7 @@ except KeyboardInterrupt:
             old_data = pickle.load(f)
         d = {
             # save only unique isbns (in case the same book was scanned twice)
-            "unknown_isbns": list(set(unknown_isbns + old_data['unknown_isbns'])),
+            "unknown_isbns": list(set(unknown_isbns + old_data["unknown_isbns"])),
         }
         # overwrite old data completely. Pickle streams are entirely
         # self-contained, so if data was appended with '+ab' we would only load
