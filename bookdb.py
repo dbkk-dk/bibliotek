@@ -51,11 +51,12 @@ def create_locations(conn):
 
 def get_locations_id(conn):
     # returns a dict with location -> id mapping
+    # {1: ('5', 'Biografi/Erindringer/Historie'), 2: ('6', 'Blandet indhold'),
     sql = "SELECT * FROM location"
     cur = conn.cursor()
     cur.execute(sql)
     rows = cur.fetchall()  # (id, label_name, full_name)
-    ids = {row[1]: row[0] for row in rows}
+    ids = {row[0]: (row[1], row[2]) for row in rows}
     return ids
 
 
