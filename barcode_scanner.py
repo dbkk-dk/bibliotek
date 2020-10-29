@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
-#
+
+"""Scan a book using a barcode scanner or write the ISBN in the console.
+
+
+The scanned book can be inserted/removed from the DB, by setting the field
+`in_lib` to 1/0, or moved to another location. Both `isbn_10` and `isbn_13` can
+be used.
+
+If the book is not found in the `DB` the ISBN is appended to the
+`unknown_barcodes.pickle` file.
+
+"""
+
+
 import functools
 import logging
 import pickle
 import pprint
 import select
 import sys
+import traceback
 
-import serial
-from serial.tools.list_ports import comports
+from isbnlib import notisbn
 
-from bookdb import create_connection, updatedb
+from bookdb import create_connection, get_locations_id, updatedb
+from helpers import get_serial_interface
 
 logging.basicConfig(level=logging.DEBUG)
 # set the root logger to debug. All other loggers ends here, due to chaining
@@ -20,57 +34,7 @@ root.setLevel(logging.DEBUG)
 
 BOOKS_DB = "books.sqlite"
 SAVE_BARCODES = True
-
-# default port on osx
-port = "/dev/tty.usbserial"
-
-
-def ask_for_port():
-    """Show a list of ports and ask the user for a choice. To make selection
-    easier on systems with long device names, also allow the input of an index.
-
-    """
-    print("\n--- Available ports:\n")
-    ports = []
-    for n, (port, desc, hwid) in enumerate(sorted(comports()), 1):
-        print("--- {:2}: {:20} {!r}".format(n, port, desc))
-        ports.append(port)
-    while True:
-        port = input("--- Enter port index or full name: ")
-        try:
-            index = int(port) - 1
-            if not 0 <= index < len(ports):
-                print("--- Invalid index!")
-                continue
-        except ValueError:
-            pass
-        else:
-            port = ports[index]
-        return port
-
-
-# Try the default macos port. If not working, ask user for port
-while True:
-    try:
-        ser = serial.Serial(port)
-        print(f"reading from {ser.name}")
-        break
-    except serial.serialutil.SerialException:
-        port = ask_for_port()
-        # on macos there's cu.serial and tty.serial. The latter is read only,
-        # so we use that.
-        port = port.replace("cu.", "tty,")
-
-
-def get_locations_id(conn):
-    # returns a dict with location -> id mapping
-    sql = "SELECT * FROM location"
-    cur = conn.cursor()
-    cur.execute(sql)
-    rows = cur.fetchall()  # (id, label_name, full_name)
-    ids = {row[0]: (row[1], row[2]) for row in rows}
-    return ids
-
+UNKNOWN_ISBN_FILE = "unknown_barcodes.pickle"
 
 # single_dispatch: A form of generic function dispatch where the implementation
 # is chosen based on the type of a single argument.
@@ -95,6 +59,38 @@ def _(data):
     return decode(data)
 
 
+def query_new_location():
+    # query for new location.
+    global loc_id_map
+    first = True
+    while True:
+        try:
+            ret = input("Indtast hylde. [l] to view loc, [ret] to keep current loc\n")
+            if ret == "":
+                return None
+            data = loc_id_map[ret]
+            break
+        except KeyError as e:
+            print(f"forkert hylde {e}")
+            if first:
+                pprint.pprint(id_loc_map)
+                first = False
+    return data
+
+
+def load_unknown_isbns():
+    try:
+        # catch error if file not found. Another way to handle this, could
+        # be to open as a+ instead of r, to make sure the file is created if
+        # not found.
+        # pickle throws an error(EOFError) if no data is found in the file.
+        with open(UNKNOWN_ISBN_FILE, "rb") as f:
+            old_data = pickle.load(f)
+    except (EOFError, FileNotFoundError):
+        old_data = {}
+    return old_data
+
+
 conn = create_connection(BOOKS_DB)
 # {1: ('5', 'Biografi/Erindringer/Historie'), 2: ('6', 'Blandet indhold'), ...
 id_loc_map = get_locations_id(conn)
@@ -105,12 +101,19 @@ KEEP_SQL = "UPDATE book SET in_lib = ? WHERE id = ?;"
 MOVE_SQL = "UPDATE book SET location = ? WHERE id = ?;"
 
 # different inputs to read from. Nonblocking by using select
-inputs = [sys.stdin, ser]
+try:
+    ser = get_serial_interface()
+    inputs = [sys.stdin, ser]
+except KeyboardInterrupt:
+    inputs = [sys.stdin]
 
-unknown_isbns = []
+unknown_isbns = load_unknown_isbns()
+loc = None
+ask_for_location = True
+isbn = None
 try:
     while True:
-        print("scan book")
+        print("scan book. [loc], [batch], [c].")
         # read from multiple inputs
         (ready, [], []) = select.select(inputs, [], [])
         if not ready:
@@ -120,10 +123,31 @@ try:
                 # decode and strip newline
                 barcode = f.readline()
                 barcode = decode(barcode)
-
         print(barcode)
 
-        data = {k: f"%{barcode}%" for k in ("isbn", "isbn_10", "isbn_13")}
+        if barcode == "loc":
+            loc = query_new_location()
+            continue
+        if barcode == "batch":
+            ask_for_location = not ask_for_location
+            continue
+        if barcode == "c":
+            # get last scanned isbn - or last inserted isbn
+            if not isbn:
+                isbn = list(unknown_isbns)[-1]
+            locid = unknown_isbns[isbn]
+            print(f"Previous book: {isbn}, {id_loc_map[locid]}")
+            locid = query_new_location() or locid
+            unknown_isbns[isbn] = locid
+            print(f"{isbn} updated to {id_loc_map[locid]}")
+            continue
+
+        if notisbn(barcode):
+            print(f"Not valid isbn10/isbn13, {barcode}")
+            continue
+
+        isbn = barcode
+        data = {k: f"%{isbn}%" for k in ("isbn", "isbn_10", "isbn_13")}
         sql = " like ? or ".join(data.keys()) + " like ?"
         key = list(data.values())
         sql = (
@@ -151,29 +175,41 @@ try:
                 sql = KEEP_SQL
                 data = 0
             elif ret == "c":
+                data = query_new_location() or location
                 sql = MOVE_SQL
-                data = input("New location\n")
-                data = loc_id_map[data]
             elif ret == "l":
                 pprint.pprint(id_loc_map)
+                data = query_new_location() or location
+                sql = MOVE_SQL
             else:
                 continue
             data = (data, id)
             updatedb(conn, sql, data)
 
         else:
-            unknown_isbns.append(barcode)
-            print(f"isbn {barcode} does not exist")
+            locid = None
+            if isbn in unknown_isbns:
+                locid = unknown_isbns[isbn]
+                print(
+                    f"isbn {isbn} already in unknown_isbns with loc {id_loc_map[locid]}"
+                )
+            if loc is None or ask_for_location or (locid is not None):
+                loc = query_new_location() or locid
+            unknown_isbns[isbn] = loc
+            print(
+                f"isbn {isbn} with loc {id_loc_map[loc]}."
+                f" [c] to change location"
+            )
+except Exception as e:
+    print(traceback.print_exc())
 except KeyboardInterrupt:
+    pass
+finally:
     if SAVE_BARCODES:
-        with open("unknown_barcodes.pickle", "rb") as f:
-            old_data = pickle.load(f)
-        d = {
-            # save only unique isbns (in case the same book was scanned twice)
-            "unknown_isbns": list(set(unknown_isbns + old_data["unknown_isbns"])),
-        }
         # overwrite old data completely. Pickle streams are entirely
         # self-contained, so if data was appended with '+ab' we would only load
         # one pickle stream
-        with open("unknown_barcodes.pickle", "wb") as f:
-            pickle.dump(d, f)
+        with open(UNKNOWN_ISBN_FILE, "wb") as f:
+            pickle.dump(unknown_isbns, f)
+        print("unknown ISBNS saved")
+        pprint.pprint(unknown_isbns)
